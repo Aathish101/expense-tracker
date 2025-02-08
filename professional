@@ -1,0 +1,111 @@
+import tkinter as tk
+from tkinter import messagebox
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+def calculate_expenses():
+    try:
+        salary = float(entry_salary.get())
+        
+        # Collect and sum all debts
+        total_debt = 0
+        debt_details = ""
+        for category, (entry, date_entry) in debt_entries.items():
+            debt_value = entry.get()
+            debt_date = date_entry.get()
+            if debt_value:
+                total_debt += float(debt_value)
+                debt_details += f"{category} - Amount: ${debt_value}, Due Date: {debt_date}\n"
+        
+        if salary <= 0:
+            messagebox.showerror("Input Error", "Salary must be a positive number")
+            return
+        
+        if total_debt < 0:
+            messagebox.showerror("Input Error", "Debts cannot be negative")
+            return
+        
+        net_salary = salary - total_debt
+        
+        if net_salary <= 0:
+            messagebox.showerror("Input Error", "Net salary must be positive after deducting debts")
+            return
+
+        # Percentage-based allocation for business expenses
+        expenses = {
+            "Rent/Lease": net_salary * 0.25,
+            "Salaries/Wages": net_salary * 0.30,
+            "Supplies/Inventory": net_salary * 0.20,
+            "Utilities": net_salary * 0.10,
+            "Marketing/Advertising": net_salary * 0.10,
+            "Miscellaneous": net_salary * 0.05
+        }
+
+        result_text.set(f"Net Salary: ${net_salary:.2f}\nDebts: ${total_debt:.2f}\n" + "\n".join([f"{key}: ${value:.2f}" for key, value in expenses.items()]))
+
+        # Open a new window for the pie chart
+        open_pie_chart_window(expenses)
+
+    except ValueError:
+        messagebox.showerror("Input Error", "Please enter valid numeric values for salary and debts")
+
+def open_pie_chart_window(expenses):
+    # Create a new window for the pie chart
+    pie_chart_window = tk.Toplevel(root)
+    pie_chart_window.title("Expense Distribution Pie Chart")
+    pie_chart_window.geometry("500x500")
+    
+    # Create the pie chart
+    labels = list(expenses.keys())
+    sizes = list(expenses.values())
+    colors = ['#ff9999','#66b3ff','#99ff99','#ffcc99','#c2c2f0','#ffb3e6']
+    
+    fig, ax = plt.subplots()
+    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
+    ax.axis('equal')  # Equal aspect ratio ensures the pie chart is a circle.
+
+    # Embed the pie chart in the new window
+    canvas = FigureCanvasTkAgg(fig, master=pie_chart_window)
+    canvas.draw()
+    canvas.get_tk_widget().pack(pady=10)
+
+# Create main application window
+root = tk.Tk()
+root.title("Business Expense Analyzer")
+root.geometry("400x600")
+
+# Salary input
+label_salary = tk.Label(root, text="Enter your Business Salary/Income:")
+label_salary.pack(pady=5)
+entry_salary = tk.Entry(root)
+entry_salary.pack(pady=5)
+
+# Debt input section
+label_debts = tk.Label(root, text="Enter your Business Debts/Expenses:")
+label_debts.pack(pady=5)
+
+debt_categories = ["Rent/Lease", "Salaries/Wages", "Supplies/Inventory", "Utilities", "Marketing/Advertising", "Miscellaneous"]
+debt_entries = {}
+
+for category in debt_categories:
+    lbl = tk.Label(root, text=f"Enter your {category}:")
+    lbl.pack(pady=2)
+    entry = tk.Entry(root)
+    entry.pack(pady=2)
+    date_lbl = tk.Label(root, text=f"Enter Due Date for {category}:")
+    date_lbl.pack(pady=2)
+    date_entry = tk.Entry(root)
+    date_entry.pack(pady=2)
+    debt_entries[category] = (entry, date_entry)
+
+# Calculate button
+btn_calculate = tk.Button(root, text="Calculate Business Expenses", command=calculate_expenses)
+btn_calculate.pack(pady=10)
+
+# Results display
+result_text = tk.StringVar()
+label_result = tk.Label(root, textvariable=result_text, justify="left")
+label_result.pack(pady=10)
+
+# Run application
+root.mainloop()
