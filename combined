@@ -1,0 +1,187 @@
+import tkinter as tk
+from tkinter import messagebox
+import sqlite3
+import hashlib
+import re
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+# Database Setup
+conn = sqlite3.connect("users.db")
+cursor = conn.cursor()
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        account_type TEXT NOT NULL
+    )
+''')
+conn.commit()
+
+# Function to Hash Password
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# Function to Validate Email
+def is_valid_email(email):
+    return re.match(r"[^@]+@[^@]+\.[^@]+", email)
+
+# Function to Handle Login
+def login():
+    email = entry_email.get()
+    password = entry_password.get()
+
+    if not email or not password:
+        messagebox.showerror("Login Failed", "Email and password cannot be empty!")
+        return
+
+    cursor.execute("SELECT password, account_type FROM users WHERE email=?", (email,))
+    user = cursor.fetchone()
+
+    if user and user[0] == hash_password(password):
+        messagebox.showinfo("Login Successful", f"Welcome, {user[1]} user!")
+        root.withdraw()
+        open_dashboard(user[1])
+    else:
+        messagebox.showerror("Login Failed", "Invalid email or password")
+
+# Function to Handle Registration
+def register():
+    email = entry_email.get()
+    password = entry_password.get()
+    account_type = account_type_var.get()
+
+    if not email or not password or not account_type:
+        messagebox.showerror("Registration Failed", "All fields are required!")
+        return
+
+    if not is_valid_email(email):
+        messagebox.showerror("Registration Failed", "Invalid email format!")
+        return
+
+    try:
+        hashed_pwd = hash_password(password)
+        cursor.execute("INSERT INTO users (email, password, account_type) VALUES (?, ?, ?)", 
+                       (email, hashed_pwd, account_type))
+        conn.commit()
+        messagebox.showinfo("Success", "Registration successful!")
+    except sqlite3.IntegrityError:
+        messagebox.showerror("Error", "Email already registered!")
+
+# Function to Open Dashboard
+def open_dashboard(account_type):
+    dashboard = tk.Toplevel()
+    dashboard.title(f"{account_type} Expense Tracker")
+    dashboard.geometry("500x600")
+
+    def logout():
+        dashboard.destroy()
+        root.deiconify()
+
+    tk.Button(dashboard, text="Logout", command=logout, fg="red").pack(pady=5)
+    open_expense_tracker(dashboard, account_type)
+
+# Function to Open Expense Tracker
+def open_expense_tracker(window, expense_type):
+    tk.Label(window, text=f"{expense_type} Expense Tracker", font=("Arial", 12)).pack(pady=5)
+    tk.Label(window, text="Enter Salary/Income:").pack()
+    entry_salary = tk.Entry(window)
+    entry_salary.pack()
+
+    categories = {
+        "Personal": ["Rent", "Groceries", "Utilities", "Savings", "Entertainment", "Miscellaneous"],
+        "Professional": ["Rent/Lease", "Salaries/Wages", "Supplies/Inventory", "Utilities", "Marketing", "Miscellaneous"]
+    }
+
+    debt_entries = {}
+    for category in categories[expense_type]:
+        tk.Label(window, text=f"{category} Amount:").pack()
+        entry = tk.Entry(window)
+        entry.pack()
+        tk.Label(window, text=f"{category} Due Date (MM/DD/YYYY):").pack()
+        date_entry = tk.Entry(window)
+        date_entry.pack()
+        debt_entries[category] = (entry, date_entry)
+
+    result_text = tk.StringVar()
+    tk.Label(window, textvariable=result_text, justify="left").pack()
+
+    def calculate_expenses():
+        try:
+            salary = float(entry_salary.get())
+            total_debt = sum(float(entry.get() or 0) for entry, _ in debt_entries.values())
+
+            if salary <= 0:
+                messagebox.showerror("Input Error", "Salary must be positive!")
+                return
+
+            net_salary = salary - total_debt
+            if net_salary <= 0:
+                messagebox.showerror("Input Error", "Net salary must be positive after debts!")
+                return
+
+            expenses = {
+                "Rent": net_salary * 0.30,
+                "Groceries": net_salary * 0.15,
+                "Utilities": net_salary * 0.10,
+                "Savings": net_salary * 0.20,
+                "Entertainment": net_salary * 0.10,
+                "Miscellaneous": net_salary * 0.15
+            } if expense_type == "Personal" else {
+                "Rent/Lease": net_salary * 0.25,
+                "Salaries/Wages": net_salary * 0.30,
+                "Supplies/Inventory": net_salary * 0.20,
+                "Utilities": net_salary * 0.10,
+                "Marketing": net_salary * 0.10,
+                "Miscellaneous": net_salary * 0.05
+            }
+
+            result_text.set(f"Net Salary: ${net_salary:.2f}\nDebts: ${total_debt:.2f}\n" +
+                            "\n".join([f"{key}: ${value:.2f}" for key, value in expenses.items()]))
+            plot_pie_chart(expenses, window)
+
+        except ValueError:
+            messagebox.showerror("Input Error", "Enter valid numeric values!")
+
+    tk.Button(window, text="Calculate Expenses", command=calculate_expenses).pack(pady=5)
+
+# Function to Plot Expense Pie Chart
+def plot_pie_chart(expenses, window):
+    pie_chart_frame = tk.Frame(window)
+    pie_chart_frame.pack(pady=10)
+
+    labels = list(expenses.keys())
+    sizes = list(expenses.values())
+    colors = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99', '#c2c2f0', '#ffb3e6']
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
+    ax.axis('equal')
+
+    canvas = FigureCanvasTkAgg(fig, master=pie_chart_frame)
+    canvas.draw()
+    canvas.get_tk_widget().pack()
+
+# Tkinter Login/Register UI
+root = tk.Tk()
+root.title("Login/Register")
+root.geometry("400x300")
+
+tk.Label(root, text="Email:").pack()
+entry_email = tk.Entry(root)
+entry_email.pack()
+
+tk.Label(root, text="Password:").pack()
+entry_password = tk.Entry(root, show="*")
+entry_password.pack()
+
+account_type_var = tk.StringVar()
+tk.Label(root, text="Account Type:").pack()
+tk.Radiobutton(root, text="Personal", variable=account_type_var, value="Personal").pack()
+tk.Radiobutton(root, text="Professional", variable=account_type_var, value="Professional").pack()
+
+tk.Button(root, text="Login", command=login).pack(pady=5)
+tk.Button(root, text="Register", command=register).pack(pady=5)
+
+root.mainloop()
